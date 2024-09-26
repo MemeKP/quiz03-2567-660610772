@@ -1,9 +1,7 @@
-import { DB, readDB, writeDB, Database, User } from "@lib/DB";
+import { DB, readDB, writeDB, Database, User, Payload } from "@lib/DB";
 import { checkToken } from "@lib/checkToken";
 import { nanoid } from "nanoid";
 import { NextRequest, NextResponse } from "next/server";
-import { headers } from "next/headers";
-import jwt from "jsonwebtoken";
 
 
 export const GET = async () => {
@@ -17,19 +15,7 @@ export const GET = async () => {
 
 export const POST = async (request: NextRequest) => {
   const payload = checkToken();
-  const rawAuthHeader = headers().get("authorization");
 
-  if (!rawAuthHeader || !rawAuthHeader.startsWith("Bearer ")) {
-    return NextResponse.json(
-      {
-        ok: false,
-        message: "Authorization header is required",
-      },
-      { status: 401 }
-    );
-  }
-
-  const token = rawAuthHeader.split(" ")[1];
   if (!payload) {
     return NextResponse.json(
       {
@@ -39,14 +25,10 @@ export const POST = async (request: NextRequest) => {
       { status: 401 }
     );
   }
-  const secret = process.env.JWT_SECRET || "This is my special secret";
-  let role = null;
-  try {
-    const payload = jwt.verify(token, secret);
 
-    //read role information from "payload"
-    role = (<User>payload).role;
-  } catch {
+  const { role } = <Payload>payload;
+
+  if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
     return NextResponse.json(
       {
         ok: false,
@@ -56,43 +38,33 @@ export const POST = async (request: NextRequest) => {
     );
   }
 
-  //check role
-  
-  if (role == "ADMIN" || role == "SUPER_ADMIN") {
-    return NextResponse.json({
-      // roomname: ,
-    });
-  }
+  const body = await request.json();
+  const { roomName } = body;
 
   readDB();
 
-  const foundRooms = (<Database>DB).rooms.find((x) => x.roomId === roomId);
-  if(foundRooms){
+  const foundRoomName = (<Database>DB).rooms.find((x) => x.roomName === roomName);
+  if (foundRoomName) {
     return NextResponse.json(
       {
         ok: false,
-        message: `Room ${foundRooms.roomName} already exists`,
+        message: `Room ${roomName} already exists`,
       },
       { status: 400 }
     );
   }
 
-  // return NextResponse.json(
-  //   {
-  //     ok: false,
-  //     message: `Room ${"replace this with room name"} already exists`,
-  //   },
-  //   { status: 400 }
-  // );
-
   const roomId = nanoid();
 
-  //call writeDB after modifying Database
+  (<Database>DB).rooms.push({
+    roomId,
+    roomName,
+  });
   writeDB();
 
   return NextResponse.json({
     ok: true,
-    //roomId,
-    message: `Room ${"replace this with room name"} has been created`,
+    roomId: roomId,
+    message: `Room ${roomName} has been created`,
   });
 };
